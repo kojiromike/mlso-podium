@@ -45,7 +45,7 @@ See `schema.md` for column-level details.
 
 Effort estimates are rough. They're for sequencing, not deadlines.
 
-- [ ] **Phase 1 — Workbook skeleton.** Create dev workbook. Add tabs
+- [x] **Phase 1 — Workbook skeleton.** Create dev workbook. Add tabs
       and columns per `schema.md`. Add data validation dropdowns from a
       hidden `Lookups` tab for enum fields. Hand-enter known venues
       (VFMS, BMPC, KI) and any people you already know. *(1–2 hrs)*
