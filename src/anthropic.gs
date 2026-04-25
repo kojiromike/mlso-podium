@@ -1,38 +1,56 @@
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
-const ANTHROPIC_MAX_TOKENS = 1024;
+const ANTHROPIC_MAX_TOKENS = 2048;
 const TOOL_LOOP_LIMIT = 8;
 
-// Server endpoint called by the sidebar. Returns { reply, history } so
-// the client can store the full block-aware history (assistant turns
-// and tool-result turns may be content-block arrays, not strings) and
-// replay it on the next user turn.
+// Server endpoint called by the sidebar. Returns:
+//   { reply, history, proposal? }
+// where proposal, if present, is a pending validated batch awaiting
+// user approval. The client passes history back unchanged on the next
+// call so the model sees the full block-aware conversation including
+// any tool exchanges.
 function sendMessage(history) {
-  let messages = history.slice();
+  return runChat_(history.slice());
+}
+
+// Sidebar Approve handler. Applies the proposal, then sends a synthetic
+// user message so the model can react and offer next steps.
+function approveProposal(proposal, history) {
+  const result = applyProposal(proposal);
+  const note = 'User approved proposal ' + proposal.id + '. ' +
+    result.applied + ' operations applied (' + result.summary + ').';
+  const msgs = history.slice();
+  msgs.push({ role: 'user', content: note });
+  return runChat_(msgs);
+}
+
+// Sidebar Reject handler. Drops the proposal and tells the model.
+function rejectProposal(proposal, reason, history) {
+  const note = 'User rejected proposal ' + proposal.id +
+    (reason ? '. Reason: ' + reason : '. No reason given.');
+  const msgs = history.slice();
+  msgs.push({ role: 'user', content: note });
+  return runChat_(msgs);
+}
+
+function runChat_(messages) {
+  stripCacheControl_(messages);
+  let pendingProposal = null;
   for (let i = 0; i < TOOL_LOOP_LIMIT; i++) {
     const data = callAnthropic_(messages);
     const blocks = data.content || [];
     messages.push({ role: 'assistant', content: blocks });
     if (data.stop_reason !== 'tool_use') {
-      return { reply: extractText_(data), history: messages };
+      return { reply: extractText_(data), history: messages, proposal: pendingProposal };
     }
     const toolUses = blocks.filter(function (b) { return b.type === 'tool_use'; });
+    stripCacheControl_(messages);
     const toolResults = toolUses.map(function (b, idx) {
-      let content;
-      let isError = false;
-      try {
-        content = runTool_(b.name, b.input);
-      } catch (e) {
-        content = String((e && e.message) || e);
-        isError = true;
-      }
-      const block = {
-        type: 'tool_result',
-        tool_use_id: b.id,
-        content: content,
-      };
-      if (isError) block.is_error = true;
+      const r = runToolSafely_(b);
+      if (r.proposal) pendingProposal = r.proposal;
+      const block = { type: 'tool_result', tool_use_id: b.id, content: r.text };
+      if (r.isError) block.is_error = true;
       if (idx === toolUses.length - 1) {
         block.cache_control = { type: 'ephemeral' };
       }
@@ -41,6 +59,32 @@ function sendMessage(history) {
     messages.push({ role: 'user', content: toolResults });
   }
   throw new Error('Tool loop exceeded ' + TOOL_LOOP_LIMIT + ' iterations.');
+}
+
+// Anthropic allows max 4 cache_control blocks per request. We mark the
+// system prompt and one tool_result per turn, so we strip stale markers
+// from the message history before adding a new one to stay under the cap.
+function stripCacheControl_(messages) {
+  messages.forEach(function (m) {
+    if (!Array.isArray(m.content)) return;
+    m.content.forEach(function (b) {
+      if (b && b.cache_control) delete b.cache_control;
+    });
+  });
+}
+
+function runToolSafely_(block) {
+  try {
+    const out = runTool_(block.name, block.input);
+    if (typeof out === 'string') return { text: out };
+    return {
+      text: out.text,
+      proposal: out.proposal || null,
+      isError: !!out.isError,
+    };
+  } catch (e) {
+    return { text: String((e && e.message) || e), isError: true };
+  }
 }
 
 function callAnthropic_(messages) {

@@ -43,7 +43,42 @@
       }
       .msg.user .who { color: #1a73e8; }
       .msg.assistant .who { color: #188038; }
+      .msg.system .who { color: #5f6368; }
       .msg.error { color: #c5221f; }
+      #proposal {
+        border-top: 1px solid #e0e0e0;
+        background: #fef7e0;
+        padding: 12px 16px;
+      }
+      #proposal h2 {
+        font-size: 13px;
+        font-weight: 600;
+        margin: 0 0 8px;
+      }
+      #proposal-summary {
+        font-size: 12px;
+        color: #5f6368;
+        margin-bottom: 8px;
+      }
+      #proposal-diff {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        padding: 8px;
+        max-height: 240px;
+        overflow: auto;
+        white-space: pre;
+      }
+      .op-insert { color: #137333; }
+      .op-update { color: #b06000; }
+      .op-delete { color: #c5221f; }
+      #proposal-actions {
+        margin-top: 8px;
+        display: flex;
+        gap: 6px;
+      }
       footer {
         padding: 8px 12px;
         border-top: 1px solid #e0e0e0;
@@ -69,6 +104,12 @@
         color: white;
         cursor: pointer;
       }
+      button.secondary {
+        background: #5f6368;
+      }
+      button.danger {
+        background: #c5221f;
+      }
       button:disabled {
         background: #9aa0a6;
         cursor: default;
@@ -78,19 +119,34 @@
   <body>
     <header><h1>Podium Assistant</h1></header>
     <div id="log"></div>
+    <div id="proposal" hidden>
+      <h2>Proposed changes</h2>
+      <div id="proposal-summary"></div>
+      <div id="proposal-diff"></div>
+      <div id="proposal-actions">
+        <button id="approve">Approve</button>
+        <button id="reject" class="danger">Reject</button>
+      </div>
+    </div>
     <footer>
       <textarea id="input" placeholder="Message…" rows="1"></textarea>
       <button id="send">Send</button>
     </footer>
     <script>
       const history = [];
+      let pendingProposal = null;
       const log = document.getElementById('log');
       const input = document.getElementById('input');
       const send = document.getElementById('send');
+      const proposalBox = document.getElementById('proposal');
+      const proposalSummary = document.getElementById('proposal-summary');
+      const proposalDiff = document.getElementById('proposal-diff');
+      const approveBtn = document.getElementById('approve');
+      const rejectBtn = document.getElementById('reject');
 
-      function append(role, text, cls) {
+      function append(role, text) {
         const div = document.createElement('div');
-        div.className = 'msg ' + (cls || role);
+        div.className = 'msg ' + role;
         const who = document.createElement('div');
         who.className = 'who';
         who.textContent = role;
@@ -100,13 +156,52 @@
         div.appendChild(body);
         log.appendChild(div);
         log.scrollTop = log.scrollHeight;
-        return body;
       }
 
       function setBusy(busy) {
         send.disabled = busy;
         input.disabled = busy;
+        approveBtn.disabled = busy;
+        rejectBtn.disabled = busy;
         send.textContent = busy ? '…' : 'Send';
+      }
+
+      function renderProposal(p) {
+        pendingProposal = p || null;
+        if (!p) {
+          proposalBox.hidden = true;
+          return;
+        }
+        proposalSummary.textContent = p.summary;
+        proposalDiff.innerHTML = '';
+        p.operations.forEach(function (op) {
+          const line = document.createElement('div');
+          line.className = 'op-' + op.op;
+          if (op.op === 'insert') {
+            line.textContent = '+ ' + op.tab + ': ' + JSON.stringify(op.row);
+          } else if (op.op === 'update') {
+            line.textContent = '~ ' + op.tab + '[' + op.pk + ']: ' + JSON.stringify(op.row);
+          } else if (op.op === 'delete') {
+            line.textContent = '- ' + op.tab + '[' + op.pk + ']';
+          }
+          proposalDiff.appendChild(line);
+        });
+        proposalBox.hidden = false;
+      }
+
+      function handleResult(result) {
+        history.length = 0;
+        Array.prototype.push.apply(history, result.history);
+        if (result.reply) append('assistant', result.reply);
+        renderProposal(result.proposal);
+        setBusy(false);
+        input.focus();
+      }
+
+      function handleFailure(err) {
+        append('error', String(err && err.message || err));
+        setBusy(false);
+        input.focus();
       }
 
       function submit() {
@@ -117,23 +212,42 @@
         input.value = '';
         setBusy(true);
         google.script.run
-          .withSuccessHandler(function (result) {
-            history.length = 0;
-            Array.prototype.push.apply(history, result.history);
-            append('assistant', result.reply);
-            setBusy(false);
-            input.focus();
-          })
+          .withSuccessHandler(handleResult)
           .withFailureHandler(function (err) {
-            append('error', String(err && err.message || err), 'error');
             history.pop();
-            setBusy(false);
-            input.focus();
+            handleFailure(err);
           })
           .sendMessage(history);
       }
 
+      function approve() {
+        if (!pendingProposal) return;
+        const p = pendingProposal;
+        append('system', 'Approved: ' + p.summary);
+        renderProposal(null);
+        setBusy(true);
+        google.script.run
+          .withSuccessHandler(handleResult)
+          .withFailureHandler(handleFailure)
+          .approveProposal(p, history);
+      }
+
+      function reject() {
+        if (!pendingProposal) return;
+        const reason = prompt('Reason for rejecting? (optional)') || '';
+        const p = pendingProposal;
+        append('system', 'Rejected: ' + p.summary + (reason ? ' — ' + reason : ''));
+        renderProposal(null);
+        setBusy(true);
+        google.script.run
+          .withSuccessHandler(handleResult)
+          .withFailureHandler(handleFailure)
+          .rejectProposal(p, reason, history);
+      }
+
       send.addEventListener('click', submit);
+      approveBtn.addEventListener('click', approve);
+      rejectBtn.addEventListener('click', reject);
       input.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();

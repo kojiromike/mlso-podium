@@ -61,12 +61,12 @@ Effort estimates are rough. They're for sequencing, not deadlines.
       response in the sidebar. Store API key in `PropertiesService`.
       *(2 hrs)*
 
-- [ ] **Phase 4 — Tool-use loop with `read_workbook` only.** Implement
+- [x] **Phase 4 — Tool-use loop with `read_workbook` only.** Implement
       the tool-use loop. AI can read the whole workbook and answer
       questions about it. No writes yet. Use prompt caching for the
       workbook context. *(3 hrs)*
 
-- [ ] **Phase 5 — `propose_writes` + `apply_writes` with hard
+- [x] **Phase 5 — `propose_writes` + `apply_writes` with hard
       validators.** Implement the write proposal flow: AI calls
       `propose_writes`, validators run, diff renders in sidebar,
       approve/reject buttons trigger `apply_writes` or feedback to AI.
