@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "sync-prompt": "node scripts/sync-prompt.js",
+    "push": "npm run sync-prompt && clasp push -f"
+  },
   "devDependencies": {
     "@google/clasp": "^3.3.0"
   }

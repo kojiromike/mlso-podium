@@ -61,8 +61,10 @@ See `docs/decisions.md` for why these choices.
 
 4. Push code to Apps Script:
    ```bash
-   clasp push
+   npm run push
    ```
+   (Regenerates `src/systemPrompt.gs` from `docs/system-prompt.md`,
+   then runs `clasp push -f`.)
 
 5. Set secrets in the Apps Script project: **Project Settings →
    Script Properties**. Add three properties:
@@ -83,7 +85,7 @@ script properties in the prod project.
 
 ## Working in the repo
 
-- Code lives in `src/`. After edits: `clasp push`.
+- Code lives in `src/`. After edits: `npm run push`.
 - Design docs live in `docs/`. Read them before changing code.
 - Secrets never go in source.
 

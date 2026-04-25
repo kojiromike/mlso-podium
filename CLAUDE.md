@@ -27,7 +27,9 @@ If you're picking up work on this repo, read in this order:
   Apps Script reads it (or a generated constant from it). Treat changes
   like code changes.
 - **Code lives in `src/`** and syncs to Apps Script via `clasp`. After
-  any code change: `clasp push`. There is no other deploy step.
+  any code change: `npm run push` (regenerates `src/systemPrompt.gs`
+  from `docs/system-prompt.md` and runs `clasp push -f`). There is no
+  other deploy step.
 - **Secrets never go in source.** `ANTHROPIC_API_KEY`,
   `DANIELS_USER_ID`, `DANIELS_TOKEN` live in `PropertiesService`. The
   README documents what to set; values stay out of git.
