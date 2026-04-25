@@ -117,9 +117,10 @@
         input.value = '';
         setBusy(true);
         google.script.run
-          .withSuccessHandler(function (reply) {
-            history.push({ role: 'assistant', content: reply });
-            append('assistant', reply);
+          .withSuccessHandler(function (result) {
+            history.length = 0;
+            Array.prototype.push.apply(history, result.history);
+            append('assistant', result.reply);
             setBusy(false);
             input.focus();
           })

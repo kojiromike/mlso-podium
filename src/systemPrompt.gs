@@ -1,6 +1,5 @@
-// Keep in sync with docs/system-prompt.md. The .md file is the source of
-// truth — review changes there in PRs, then mirror here. (A generator
-// script may replace this hand-sync later.)
+// GENERATED FROM docs/system-prompt.md — do not edit by hand.
+// Run `npm run sync-prompt` to regenerate.
 
 const SYSTEM_PROMPT = `# Role
 
@@ -55,9 +54,10 @@ They use the same data shape but with \`is_regular_season = false\`.
 - **Use existing IDs.** When proposing a piece, look up Daniels' ID first
   (\`search_daniels\`) and include it. Local UUIDs are only for pieces Daniels'
   doesn't have.
-- **Blank \`movement\` means "all movements in order."** Do not auto-populate
-  it from Daniels'. Only fill it when the user specifies a subset
-  (e.g., "I, II, IV (skip III)").
+- **Blank \`movement\` means "all movements in order"** — this is the default.
+  Do not ask the user which movements; assume all. Only populate \`movement\`
+  when the user volunteers a subset (e.g., "I, II, IV (skip III)"). Do not
+  auto-populate it from Daniels'.
 - **Placeholders are first-class.** A piece with \`status=placeholder\` and
   most fields blank is a valid, expected row — used for the Dietz concerto
   before the winner is announced, and for any other TBD slot. Track what's

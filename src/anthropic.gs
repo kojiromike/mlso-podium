@@ -2,12 +2,45 @@ const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 const ANTHROPIC_MAX_TOKENS = 1024;
+const TOOL_LOOP_LIMIT = 8;
 
-// Server endpoint called by the sidebar. `history` is an array of
-// {role, content} messages; the assistant reply is appended client-side.
+// Server endpoint called by the sidebar. Returns { reply, history } so
+// the client can store the full block-aware history (assistant turns
+// and tool-result turns may be content-block arrays, not strings) and
+// replay it on the next user turn.
 function sendMessage(history) {
-  const data = callAnthropic_(history);
-  return extractText_(data);
+  let messages = history.slice();
+  for (let i = 0; i < TOOL_LOOP_LIMIT; i++) {
+    const data = callAnthropic_(messages);
+    const blocks = data.content || [];
+    messages.push({ role: 'assistant', content: blocks });
+    if (data.stop_reason !== 'tool_use') {
+      return { reply: extractText_(data), history: messages };
+    }
+    const toolUses = blocks.filter(function (b) { return b.type === 'tool_use'; });
+    const toolResults = toolUses.map(function (b, idx) {
+      let content;
+      let isError = false;
+      try {
+        content = runTool_(b.name, b.input);
+      } catch (e) {
+        content = String((e && e.message) || e);
+        isError = true;
+      }
+      const block = {
+        type: 'tool_result',
+        tool_use_id: b.id,
+        content: content,
+      };
+      if (isError) block.is_error = true;
+      if (idx === toolUses.length - 1) {
+        block.cache_control = { type: 'ephemeral' };
+      }
+      return block;
+    });
+    messages.push({ role: 'user', content: toolResults });
+  }
+  throw new Error('Tool loop exceeded ' + TOOL_LOOP_LIMIT + ' iterations.');
 }
 
 function callAnthropic_(messages) {
@@ -21,6 +54,7 @@ function callAnthropic_(messages) {
     system: [
       { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
     ],
+    tools: TOOLS,
     messages: messages,
   };
   const response = UrlFetchApp.fetch(ANTHROPIC_API_URL, {
@@ -46,5 +80,6 @@ function extractText_(data) {
   return blocks
     .filter(function (b) { return b.type === 'text'; })
     .map(function (b) { return b.text; })
-    .join('\n');
+    .join('\n')
+    .trim();
 }
