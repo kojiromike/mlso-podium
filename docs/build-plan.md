@@ -56,7 +56,7 @@ Effort estimates are rough. They're for sequencing, not deadlines.
       → opens HTML sidebar that just renders text). Confirm `clasp push`
       cycle works. *(2 hrs)*
 
-- [ ] **Phase 3 — Anthropic API round-trip.** From Apps Script, call
+- [x] **Phase 3 — Anthropic API round-trip.** From Apps Script, call
       Anthropic API with no tools and the v0 system prompt. Display
       response in the sidebar. Store API key in `PropertiesService`.
       *(2 hrs)*
