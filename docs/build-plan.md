@@ -50,7 +50,7 @@ Effort estimates are rough. They're for sequencing, not deadlines.
       hidden `Lookups` tab for enum fields. Hand-enter known venues
       (VFMS, BMPC, KI) and any people you already know. *(1–2 hrs)*
 
-- [ ] **Phase 2 — Apps Script project bound to workbook.** Bind a new
+- [x] **Phase 2 — Apps Script project bound to workbook.** Bind a new
       Apps Script project to the dev workbook. Set up `clasp` so this
       repo's `src/` syncs to it. Add a hello-world sidebar (custom menu
       → opens HTML sidebar that just renders text). Confirm `clasp push`
