@@ -260,6 +260,7 @@ function applyInsert_(ss, op) {
     return v == null ? '' : v;
   });
   sheet.appendRow(row);
+  applyRowValidations_(sheet, op.tab, sheet.getLastRow());
 }
 
 function applyUpdate_(ss, op) {

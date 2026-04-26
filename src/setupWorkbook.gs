@@ -1,5 +1,6 @@
-// Workbook bootstrap: creates the v0 tabs, headers, dropdowns, and seed
-// venue rows defined in docs/schema.md. Idempotent — safe to re-run.
+// Workbook bootstrap: creates the v0 tabs, sets headers, seeds the
+// known venues, and trims default empty rows that bloat the sheet.
+// Idempotent — safe to re-run.
 // Invoke from the Apps Script editor: Run → setupWorkbook.
 
 const SCHEMA = {
@@ -16,12 +17,6 @@ const SCHEMA = {
   People: ['person_id', 'name', 'instrument', 'notes'],
 };
 
-const LOOKUPS = {
-  'Pieces.status': ['tentative', 'confirmed', 'placeholder'],
-  'Pieces.daniels_match_confidence': ['exact', 'fuzzy', 'manual', 'none'],
-  'Pieces.instrumentation_source': ['daniels', 'manual', 'score', 'none'],
-};
-
 const SEED_VENUES = [
   ['vfms', 'Valley Forge Middle School', '105 W Walker Rd, Wayne, PA 19087', ''],
   ['bmpc', 'Bryn Mawr Presbyterian Church', '625 Montgomery Ave, Bryn Mawr, PA 19010', ''],
@@ -30,29 +25,16 @@ const SEED_VENUES = [
 
 function setupWorkbook() {
   const ss = SpreadsheetApp.getActive();
-  const lookups = ensureLookupsSheet_(ss);
   ensureDataTabs_(ss);
-  applyValidations_(ss, lookups);
+  applyValidationsToExistingRows_(ss);
   seedVenues_(ss);
   removeDefaultSheet_(ss);
+  removeLegacyLookupsSheet_(ss);
   SpreadsheetApp.getActive().toast('Workbook setup complete.', 'Podium', 5);
 }
 
-function ensureLookupsSheet_(ss) {
-  const sheet = ss.getSheetByName('Lookups') || ss.insertSheet('Lookups');
-  const keys = Object.keys(LOOKUPS);
-  sheet.clear();
-  sheet.getRange(1, 1, 1, keys.length).setValues([keys]).setFontWeight('bold');
-  keys.forEach((key, i) => {
-    const vals = LOOKUPS[key];
-    sheet.getRange(2, i + 1, vals.length, 1).setValues(vals.map((v) => [v]));
-  });
-  sheet.hideSheet();
-  return sheet;
-}
-
 function ensureDataTabs_(ss) {
-  Object.keys(SCHEMA).forEach((tabName) => {
+  Object.keys(SCHEMA).forEach(function (tabName) {
     const sheet = ss.getSheetByName(tabName) || ss.insertSheet(tabName);
     const cols = SCHEMA[tabName];
     sheet.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight('bold');
@@ -60,28 +42,35 @@ function ensureDataTabs_(ss) {
   });
 }
 
-function applyValidations_(ss, lookups) {
-  applyEnumValidation_(ss, lookups, 'Pieces', 'status', 'Pieces.status');
-  applyEnumValidation_(ss, lookups, 'Pieces', 'daniels_match_confidence', 'Pieces.daniels_match_confidence');
-  applyEnumValidation_(ss, lookups, 'Pieces', 'instrumentation_source', 'Pieces.instrumentation_source');
-
-  const programs = ss.getSheetByName('Programs');
-  const boolCol = SCHEMA.Programs.indexOf('is_regular_season') + 1;
-  const boolRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
-  programs.getRange(2, boolCol, programs.getMaxRows() - 1, 1).setDataValidation(boolRule);
+function applyValidationsToExistingRows_(ss) {
+  Object.keys(SCHEMA).forEach(function (tabName) {
+    const sheet = ss.getSheetByName(tabName);
+    if (!sheet) return;
+    const lastRow = sheet.getLastRow();
+    for (let r = 2; r <= lastRow; r++) {
+      applyRowValidations_(sheet, tabName, r);
+    }
+  });
 }
 
-function applyEnumValidation_(ss, lookups, sheetName, colName, lookupKey) {
-  const sheet = ss.getSheetByName(sheetName);
-  const colIdx = SCHEMA[sheetName].indexOf(colName) + 1;
-  const lookupCol = Object.keys(LOOKUPS).indexOf(lookupKey) + 1;
-  const values = LOOKUPS[lookupKey];
-  const range = lookups.getRange(2, lookupCol, values.length, 1);
-  const rule = SpreadsheetApp.newDataValidation()
-    .requireValueInRange(range, true)
-    .setAllowInvalid(false)
-    .build();
-  sheet.getRange(2, colIdx, sheet.getMaxRows() - 1, 1).setDataValidation(rule);
+function applyRowValidations_(sheet, tabName, rowNum) {
+  const cols = SCHEMA[tabName];
+  const enums = ENUM_FIELDS[tabName] || {};
+  Object.keys(enums).forEach(function (field) {
+    const ci = cols.indexOf(field);
+    if (ci === -1) return;
+    const rule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(enums[field], true)
+      .setAllowInvalid(false)
+      .build();
+    sheet.getRange(rowNum, ci + 1).setDataValidation(rule);
+  });
+  BOOL_COLS.forEach(function (field) {
+    const ci = cols.indexOf(field);
+    if (ci === -1) return;
+    sheet.getRange(rowNum, ci + 1)
+      .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+  });
 }
 
 function seedVenues_(ss) {
@@ -89,11 +78,11 @@ function seedVenues_(ss) {
   const lastRow = venues.getLastRow();
   const existingIds = new Set();
   if (lastRow > 1) {
-    venues.getRange(2, 1, lastRow - 1, 1).getValues().forEach((r) => {
+    venues.getRange(2, 1, lastRow - 1, 1).getValues().forEach(function (r) {
       if (r[0]) existingIds.add(String(r[0]));
     });
   }
-  const toAdd = SEED_VENUES.filter((v) => !existingIds.has(v[0]));
+  const toAdd = SEED_VENUES.filter(function (v) { return !existingIds.has(v[0]); });
   if (toAdd.length) {
     venues.getRange(lastRow + 1, 1, toAdd.length, toAdd[0].length).setValues(toAdd);
   }
@@ -101,5 +90,12 @@ function seedVenues_(ss) {
 
 function removeDefaultSheet_(ss) {
   const sheet = ss.getSheetByName('Sheet1');
+  if (sheet && ss.getSheets().length > 1) ss.deleteSheet(sheet);
+}
+
+// Earlier setup created a hidden Lookups sheet for range-based validation.
+// We've moved to inline value lists, so the sheet is no longer needed.
+function removeLegacyLookupsSheet_(ss) {
+  const sheet = ss.getSheetByName('Lookups');
   if (sheet && ss.getSheets().length > 1) ss.deleteSheet(sheet);
 }

@@ -72,7 +72,7 @@ Effort estimates are rough. They're for sequencing, not deadlines.
       approve/reject buttons trigger `apply_writes` or feedback to AI.
       *(4–6 hrs)*
 
-- [ ] **Phase 6 — Daniels' integration.** Implement `search_daniels`
+- [x] **Phase 6 — Daniels' integration.** Implement `search_daniels`
       and `read_daniels` tools using the credentials in
       `PropertiesService`. Verify the assistant uses them when proposing
       pieces. *(2–3 hrs)*

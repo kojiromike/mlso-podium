@@ -10,6 +10,38 @@ const TOOLS = [
     input_schema: { type: 'object', properties: {}, required: [] },
   },
   {
+    name: 'search_daniels',
+    description:
+      'Search Daniels Orchestral Music Online for works by composer ' +
+      'name and/or work title. Returns matching works with their Daniels ' +
+      'Work IDs and movement lists. Call this before proposing a Pieces ' +
+      'row so you can populate daniels_id and instrumentation from the ' +
+      'canonical source. At least one of composer or work is required; ' +
+      'partial matches are supported.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        composer: { type: 'string', description: 'Composer name or partial name.' },
+        work: { type: 'string', description: 'Work title or partial title.' },
+      },
+    },
+  },
+  {
+    name: 'read_daniels',
+    description:
+      'Fetch the full Daniels record for a single Work ID, including ' +
+      'instrumentation formula, duration, composer details, ensemble ' +
+      'breakdown, and movement list. Use after search_daniels narrows ' +
+      'to one work.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        work_id: { type: 'string', description: 'Daniels Work ID from search_daniels.' },
+      },
+      required: ['work_id'],
+    },
+  },
+  {
     name: 'propose_writes',
     description:
       'Propose a batch of inserts/updates/deletes to the workbook. Hard ' +
@@ -53,6 +85,8 @@ const TOOLS = [
 
 function runTool_(name, input) {
   if (name === 'read_workbook') return readWorkbook_();
+  if (name === 'search_daniels') return searchDaniels_(input);
+  if (name === 'read_daniels') return readDaniels_(input);
   if (name === 'propose_writes') return proposeWrites_(input);
   throw new Error('Unknown tool: ' + name);
 }
